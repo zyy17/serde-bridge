@@ -616,6 +616,20 @@ impl<'de> serde::Deserializer<'de> for Deserializer {
     {
         match self.0 {
             Value::Map(v) => vis.visit_map(MapAccessor::new(v)),
+            Value::Struct(_vn, mut vf) => {
+                let fields = &vf.iter().map(|(k, _)| *k).collect::<Vec<&str>>()[..];
+                let mut vs = Vec::with_capacity(fields.len());
+                for key in fields {
+                    // Use `remove` instead of `get` & `clone` here.
+                    // - As serde will make sure to not access the same field twice.
+                    // - The order of key is not needed to preserve during deserialize.
+                    match vf.remove(key) {
+                        Some(v) => vs.push(v),
+                        None => return Err(Error(anyhow!("field not exist"))),
+                    }
+                }
+                vis.visit_seq(SeqAccessor::new(vs))
+            }
             v => Err(Error(anyhow!("invalid type: {:?}, expect map", v))),
         }
     }
